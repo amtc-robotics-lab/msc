@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "msc"
+#include <mean_shift_clusterin/msc.hpp>
 
 #include <vector>
 #include <memory>
@@ -36,47 +36,25 @@
 #endif
 
 typedef double Scalar;
-typedef std::vector<Scalar> Container;
+typedef Scalar Container;
 
-std::vector<Container> load(std::istream& in, int col_offset = 0);
+std::vector<Container> load(std::istream& in);
 void dump(const std::vector<Container>& points,
     const std::vector<msc::Cluster<Scalar>>& clusters);
 
-int main(int argc, char** argv)
+int main()
 {
-    const double bandwidth = argc > 1 ? std::stof(argv[1]) : 1;
-    std::istream* in = &std::cin;
-    std::ifstream infile;
-    if (argc > 2)
-    {
-        infile.open(argv[2]);
-        in = &infile;
-    }
-    else
-    {
-        #ifdef _WIN32
-        if (_isatty(_fileno(stdin)))
-        #else
-        if (isatty(fileno(stdin)))
-        #endif
-        {
-            std::cout << "Input CSV file: ";
-            std::string filename;
-            std::cin >> filename;
-            infile.open(filename);
-            in = &infile;
-        }
-    }
-    const int col_offset = argc > 3 ? std::stoi(argv[3]) : 0;
-
+    double bandwidth = 3;
+    std::ifstream in("test.txt");
     std::cerr << "Kernel bandwidth: " << bandwidth << std::endl;
-    const auto points = load(*in, col_offset);
+    const auto points = load(in);
     std::cerr << "Num. points: " << points.size() << std::endl;
     if (points.empty())
         return 0;
     const auto t0 = std::chrono::high_resolution_clock::now();
     const auto clusters = msc::mean_shift_cluster<Scalar>(
-        std::begin(points), std::end(points), points[0].size(),
+        std::begin(points), std::end(points),
+        sizeof(Container) / sizeof(Scalar),
         msc::metrics::L2Sq(),
         msc::kernels::ParabolicSq(),
         msc::estimators::Constant(bandwidth));
@@ -90,27 +68,21 @@ int main(int argc, char** argv)
         std::cerr << std::endl;
     }
     std::cerr << "Elapsed time: " << std::chrono::duration_cast<
-        std::chrono::microseconds>(t1 - t0).count() / 1e6 << " s" << std::endl;
+        std::chrono::microseconds>(t1 - t0).count() / 1e6 << std::endl;
     dump(points, clusters);
     return 0;
 }
 
-std::vector<Container> load(std::istream& in, int col_offset)
+std::vector<Container> load(std::istream& in)
 {
     std::vector<Container> points;
     std::string line;
     while (std::getline(in, line))
     {
-        if (line[0] == '%')
-            continue;
-        points.emplace_back();
-        auto& point = points.back();
         std::istringstream lin(line);
         std::string token;
-        for (int i = 0; i < col_offset; i++)
-            lin >> token;
-        while (lin >> token)
-            point.push_back(std::stod(token));
+        lin >> token;
+        points.push_back(std::stod(token));
     }
     return points;
 }
@@ -123,10 +95,7 @@ void dump(const std::vector<Container>& points,
         for (const auto& index : clusters[c].members)
         {
             const auto& point = points[index];
-            std::cout << c;
-            for (std::size_t k = 0; k < point.size(); k++)
-                std::cout << " " << point[k];
-            std::cout << std::endl;
+            std::cout << c << " " << point << std::endl;
         }
     }
 }
